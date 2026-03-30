@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aegis 审批层 MVP</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <p class="brand-kicker">Aegis Agent Wallet</p>
+        <h1>支付审批控制台</h1>
+        <p class="brand-sub">不碰资金 · 人类在回路 · 可审计</p>
+        <nav class="tabs side-tabs" aria-label="主导航">
+          <button class="tab-btn active" data-view="home">首页</button>
+          <button class="tab-btn" data-view="quota">额度</button>
+          <button class="tab-btn" data-view="agents">Agent</button>
+          <button class="tab-btn" data-view="requests">请求</button>
+          <button class="tab-btn" data-view="consumptions">消费</button>
+          <button class="tab-btn" data-view="audit">审计</button>
+        </nav>
+      </aside>
+
+      <section class="main-stage">
+        <header class="topbar">
+          <div class="mode-pill">MVP 模拟执行链路</div>
+          <label class="field">
+            <span>X-User-Token</span>
+            <input id="tokenInput" type="text" />
+          </label>
+          <div class="toolbar-actions">
+            <button id="profileBtn" class="btn secondary">个人信息</button>
+            <button id="saveTokenBtn" class="btn secondary">保存令牌</button>
+            <button id="refreshBtn" class="btn">刷新数据</button>
+          </div>
+          <p id="statusText" class="status">系统就绪</p>
+        </header>
+
+        <section id="view-home" class="view active">
+          <div class="section-head"><h2>首页总览</h2><p>展示今日审批与绑定状态。</p></div>
+          <div class="flow-grid">
+            <article class="metric-panel span-3"><span>今日请求</span><strong id="homeTodayRequests">0</strong></article>
+            <article class="metric-panel span-3"><span>今日成功</span><strong id="homeTodaySuccess">0</strong></article>
+            <article class="metric-panel span-3"><span>今日消费</span><strong id="homeTodaySpend">¥0.00</strong></article>
+            <article class="metric-panel span-3"><span>待签请求</span><strong id="homePendingCount">0</strong></article>
+
+            <article class="surface span-6">
+              <h3>额度状态</h3>
+              <div class="kv-list">
+                <div class="kv-row"><span>总余额（展示）</span><strong id="homeTotalBalance">¥0.00</strong></div>
+                <div class="kv-row"><span>保护余额</span><strong id="homeProtectedBalance">¥0.00</strong></div>
+                <div class="kv-row"><span>可用额度</span><strong id="homeAvailableQuota">¥0.00</strong></div>
+              </div>
+            </article>
+            <article class="surface span-6">
+              <h3>绑定状态</h3>
+              <div class="kv-list">
+                <div class="kv-row"><span>已绑定 Agent</span><strong id="homeBoundAgents">0</strong></div>
+                <div class="kv-row"><span>待 Agent 安装</span><strong id="homeConnectorWaitingAgent">0</strong></div>
+                <div class="kv-row"><span>待用户确认</span><strong id="homeConnectorWaitingUser">0</strong></div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="view-quota" class="view">
+          <div class="section-head"><h2>额度管控</h2><p>只允许保护余额与可用额度之间分配/回收。</p></div>
+          <div class="flow-grid">
+            <article class="surface span-6">
+              <h3>额度分配（保护 -> 可用）</h3>
+              <div class="row"><select id="allocateAgentSelect"></select><input id="allocateAmountInput" type="number" min="0.01" step="0.01" placeholder="金额" /><button id="allocateBtn" class="btn">确认分配</button></div>
+            </article>
+            <article class="surface span-6">
+              <h3>额度回收（可用 -> 保护）</h3>
+              <div class="row"><select id="reclaimAgentSelect"></select><input id="reclaimAmountInput" type="number" min="0.01" step="0.01" placeholder="金额" /><button id="reclaimBtn" class="btn">确认回收</button></div>
+            </article>
+            <article class="surface span-12"><h3>额度变更记录</h3><div id="quotaMovementList" class="table-list"></div></article>
+          </div>
+        </section>
+
+        <section id="view-agents" class="view">
+          <div class="section-head"><h2>Agent 列表</h2><p>查看每个 Agent 的额度、成功率和绑定状态。</p></div>
+          <div class="surface"><h3>创建安装链接</h3><div class="row"><input id="installAgentNameInput" type="text" placeholder="Agent显示名" /><button id="createInstallBtn" class="btn">生成安装链接</button></div><div id="installLinkBox" class="mono wrap"></div></div>
+          <div class="surface"><h3>模拟 Agent 完成安装</h3><div class="row"><input id="bindInstallIdInput" type="text" placeholder="install_id" /><input id="bindAgentIdInput" type="text" placeholder="agent_id" /><button id="completeBindBtn" class="btn secondary">提交 bind-complete</button></div></div>
+          <div class="surface"><h3>用户确认绑定</h3><div class="row"><input id="confirmBindTokenInput" type="text" placeholder="bind_token" /><button id="confirmBindBtn" class="btn secondary">确认绑定</button></div></div>
+          <div id="agentList" class="card-list"></div>
+        </section>
+
+        <section id="view-requests" class="view">
+          <div class="section-head"><h2>签署请求</h2><p>未命中预授权的请求将在这里等待人工确认。</p></div>
+          <div id="pendingList" class="card-list"></div>
+        </section>
+
+        <section id="view-consumptions" class="view">
+          <div class="section-head row between"><div><h2>消费记录</h2><p>每笔消费都展示哈希与详情。</p></div><select id="consumptionFilter"></select></div>
+          <div id="consumptionList" class="table-list"></div>
+        </section>
+
+        <section id="view-audit" class="view">
+          <div class="section-head"><h2>审计事件</h2><p>记录请求、审批、执行、回调和异常。</p></div>
+          <div id="auditList" class="table-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <nav class="mobile-bottom-nav" aria-label="移动端导航">
+      <button class="tab-btn mobile-tab active" data-view="home"><em>首页</em></button>
+      <button class="tab-btn mobile-tab" data-view="quota"><em>额度</em></button>
+      <button class="tab-btn mobile-tab" data-view="agents"><em>Agent</em></button>
+      <button class="tab-btn mobile-tab" data-view="requests"><em>请求</em></button>
+      <button class="tab-btn mobile-tab" data-view="consumptions"><em>消费</em></button>
+      <button class="tab-btn mobile-tab" data-view="audit"><em>审计</em></button>
+    </nav>
+
+    <div id="profileModal" class="modal hidden">
+      <div class="modal-panel">
+        <div class="row between"><h3>个人信息</h3><button id="profileCloseBtn" class="btn secondary">关闭</button></div>
+        <div class="modal-body profile-grid">
+          <div class="profile-item"><span>手机号绑定</span><strong id="profileMobileBound">-</strong></div>
+          <div class="profile-item"><span>手机号（脱敏）</span><strong id="profileMobileMasked">-</strong></div>
+          <div class="profile-item"><span>身份证绑定</span><strong id="profileIdCardBound">-</strong></div>
+          <div class="profile-item"><span>身份证（脱敏）</span><strong id="profileIdCardMasked">-</strong></div>
+          <div class="profile-item span-all"><span>更新时间</span><strong id="profileUpdatedAt">-</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="agentModal" class="modal hidden">
+      <div class="modal-panel">
+        <div class="row between"><h3 id="modalAgentTitle">Agent 详情</h3><button id="closeModalBtn" class="btn secondary">关闭</button></div>
+        <div id="modalAgentBody" class="modal-body"></div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
