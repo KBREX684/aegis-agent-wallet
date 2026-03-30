@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+venv/
+
+# Local runtime artifacts
+backend/aegis_mvp.db
+*.log
+backend.out.log
+backend.err.log
+cloudflared.out.log
+cloudflared.err.log
+
+# Tooling/local cache
+.codex/
+
+# OS files
+.DS_Store
+Thumbs.db
