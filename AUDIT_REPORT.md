@@ -1,23 +1,90 @@
-# Aegis 模拟MVP 审计报告
+# Aegis Simulation MVP 代码审计报告
 
-## 目标
-验证 MVP 是否满足“人类在回路、可审计、额度可控、Agent 不可越权”四项基本原则。
+日期：2026-03-29  
+范围：`simulation_mvp/` 全部源码
 
-## 覆盖范围
-- 请求创建、签署、执行主链路
-- 规则拦截与额度不足异常流
-- 预授权自动执行流
-- 绑定与身份信息查看
-- 审计事件可追溯性与消费哈希一致性
+## 1. 审计目标
 
-## 结果摘要
-- 核心功能可用：通过
-- 规则拦截有效：通过
-- 额度控制有效：通过
-- nonce 防重放：通过
-- 审计事件完整：通过
+- 验证最小MVP是否满足“人类确认后才执行支付”
+- 排查明显安全缺陷与状态机绕过风险
+- 确认关键接口具备基础输入校验与审计留痕
 
-## 风险与改进
-- 当前为单用户演示令牌模式，需要迁移正式登录态
-- WebAuthn 在不同设备兼容性需持续验证
-- 真实支付通道尚未接入，当前仅模拟执行
+## 2. 已审计项
+
+1. 鉴权
+- `POST /api/pay-requests` 需要 `X-Agent-Token`
+- `GET /api/pending-requests`、`POST /api/sign`、`GET /api/requests/<id>` 需要 `X-User-Token`
+- `POST /api/simulate-execute` 需要 `X-Internal-Token`
+
+2. 请求校验
+- `amount` 正数且有上限
+- `payee/purpose` 长度限制
+- `expires_at` 必须是带时区的ISO8601时间
+- `callback_url` 限制为 `http/https`
+
+3. 状态机一致性
+- 创建请求默认 `PENDING`
+- 仅允许 `PENDING -> APPROVED -> SUCCESS`
+- 过期请求自动转 `EXPIRED`，不能签署
+
+4. 幂等与重放控制
+- `request_id` 唯一约束
+- 同一 `request_id` 重放且载荷一致时返回幂等成功
+- 同一 `request_id` 载荷不一致时拒绝（409）
+
+5. 审计日志
+- `REQUEST_CREATED` / `REQUEST_APPROVED` / `PAYMENT_EXECUTED` / `CALLBACK_ATTEMPTED` / `REQUEST_EXPIRED`
+- 所有关键事件落库 `events` 表
+
+## 3. 自动化测试结果
+
+执行命令：
+
+```powershell
+python -m unittest tests\test_api.py -v
+```
+
+结果：5/5 通过  
+覆盖点：
+- 鉴权拦截
+- 请求创建与查询
+- 幂等重放
+- 签署后执行成功
+- 过期请求阻断
+
+## 4. 端到端实用性测试
+
+已执行 `tests/smoke_e2e.ps1` 所等价流程：
+- 启动后端服务与回调服务
+- 创建支付请求
+- 拉取待签请求
+- 发起签署
+- 校验最终状态为 `SUCCESS`
+- 校验回调被接收
+
+结果：通过
+
+## 5. 当前残余风险（MVP可接受）
+
+1. 令牌为静态字符串
+- 风险：泄露后可被重放调用
+- 建议：下一阶段改为短期JWT + 设备绑定 + 轮换机制
+
+2. 手机网页签署为“模拟签名”
+- 风险：未使用真实系统生物识别与硬件密钥
+- 建议：下一阶段接入 WebAuthn/Passkey 或原生 Biometric API
+
+3. 单机SQLite与Flask开发服务
+- 风险：并发能力和容灾有限
+- 建议：试点阶段迁移到 PostgreSQL + Gunicorn/Uvicorn
+
+4. 回调重试策略简单
+- 风险：网络抖动下存在回调丢失
+- 建议：加入指数退避重试和死信队列
+
+## 6. 结论
+
+该最小模拟MVP已满足演示目标：  
+“Agent可发起请求，但必须经过人类确认后才执行支付，且全流程可审计。”
+
+当前实现适合比赛演示、内部验证和早期试点，不可直接用于生产环境。

@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $base = "D:\agent wallet\simulation_mvp"
 Set-Location $base
@@ -29,7 +29,6 @@ try {
     expires_at   = $expiresAt
     issued_at    = $issuedAt
     nonce        = "nonce_" + $reqId
-    callback_url = "http://127.0.0.1:7001/callback"
   } | ConvertTo-Json
 
   $create = Invoke-RestMethod -Uri "http://127.0.0.1:5000/api/pay-requests" -Method Post `

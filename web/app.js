@@ -1,3 +1,4 @@
+﻿
 const USER_TOKEN_KEY = "aegis_user_token";
 const DEFAULT_USER_TOKEN = "dev-user-token";
 const POLL_MS = 5000;
@@ -60,6 +61,7 @@ const views = [...document.querySelectorAll(".view")];
 
 let dashboard = null;
 let signingInProgress = false;
+let pollTimerId = null;
 
 const fmtZhTime = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
@@ -243,6 +245,26 @@ function renderProfile(data) {
   profileIdCardBound.textContent = data.id_card_bound ? "已绑定" : "未绑定";
   profileIdCardMasked.textContent = data.id_card_masked || "未绑定";
   profileUpdatedAt.textContent = zhTime(data.updated_at);
+}	
+
+function findPendingRequest(requestId) {
+  const list = (dashboard && dashboard.pending_requests) || [];
+  return list.find((item) => item.request_id === requestId) || null;
+}
+
+function confirmSignRequest(requestId) {
+  const req = findPendingRequest(requestId);
+  if (!req) {
+    return window.confirm("确认签署该支付请求？");
+  }
+  const message = [
+    "请确认是否签署这笔支付请求：",
+    `收款方：${req.payee}`,
+    `金额：${cny(req.amount)}`,
+    `用途：${req.purpose}`,
+    `请求ID：${req.request_id}`,
+  ].join("\n");
+  return window.confirm(message);
 }
 
 async function loadDashboard(silent = false) {
@@ -354,6 +376,10 @@ async function confirmBinding() {
 }
 
 async function signRequest(requestId) {
+  if (!confirmSignRequest(requestId)) {
+    setStatus("已取消签署", false);
+    return;
+  }
   try {
     signingInProgress = true;
     const buttons = pendingList.querySelectorAll("button[data-sign-id]");
@@ -369,6 +395,26 @@ async function signRequest(requestId) {
   } finally {
     signingInProgress = false;
   }
+}
+
+function startDashboardPolling() {
+  if (pollTimerId !== null) return;
+  pollTimerId = setInterval(() => loadDashboard(true), POLL_MS);
+}
+
+function stopDashboardPolling() {
+  if (pollTimerId === null) return;
+  clearInterval(pollTimerId);
+  pollTimerId = null;
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === "hidden") {
+    stopDashboardPolling();
+    return;
+  }
+  loadDashboard(true);
+  startDashboardPolling();
 }
 
 async function openAgentDetail(agentId) {
@@ -440,4 +486,5 @@ agentList.addEventListener("click", (e) => {
 
 tokenInput.value = getToken();
 loadDashboard();
-setInterval(() => loadDashboard(true), POLL_MS);
+startDashboardPolling();
+document.addEventListener("visibilitychange", handleVisibilityChange);
